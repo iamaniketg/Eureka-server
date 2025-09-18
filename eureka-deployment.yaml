@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discovery-server
+  namespace: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: discovery-server
+  template:
+    metadata:
+      labels:
+        app: discovery-server
+    spec:
+      containers:
+        - name: discovery-server
+          image: eureka-server:0.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8761
+          env:
+            - name: EUREKA_INSTANCE_HOSTNAME
+              value: "discovery-server"
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/config/application.yml
+              subPath: application.yml
+      volumes:
+        - name: config-volume
+          configMap:
+            name: eureka-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: discovery-server
+  namespace: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: discovery-server
+  ports:
+    - port: 8761
+      targetPort: 8761
+      protocol: TCP
