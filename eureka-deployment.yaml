@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: discovery-server
-          image: eureka-server:0.1
+          image: eureka-server:0.3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8761
