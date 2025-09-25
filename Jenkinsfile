@@ -4,6 +4,8 @@ pipeline {
     environment {
         REGISTRY   = "docker.io/captainaniii"
         IMAGE_NAME = "springboot-app"
+        DOCKER_HOME = tool name: 'docker', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
+        PATH = "${DOCKER_HOME}/bin:${env.PATH}"
     }
 
     stages {
