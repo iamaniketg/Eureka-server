@@ -4,8 +4,13 @@ pipeline {
     environment {
         REGISTRY   = "docker.io/captainaniii"
         IMAGE_NAME = "springboot-app"
-        DOCKER_HOME = tool name: 'docker', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
-        PATH = "${DOCKER_HOME}/bin:${env.PATH}"
+
+        // Use Jenkins-managed tools
+        MAVEN_HOME   = tool name: 'maven', type: 'hudson.tasks.Maven$MavenInstallation'
+        DOCKER_HOME  = tool name: 'docker', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
+        KUBECTL_HOME = tool name: 'kubectl', type: 'org.jenkinsci.plugins.kubernetes.cli.KubectlInstallation'
+
+        PATH = "${MAVEN_HOME}/bin:${DOCKER_HOME}/bin:${KUBECTL_HOME}/bin:${env.PATH}"
     }
 
     stages {
