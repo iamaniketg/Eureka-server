@@ -46,21 +46,23 @@ pipeline {
         }
         stage('Deploy to Kubernetes') {
             steps {
-                script {
-                    def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-                    def deployment = "myapp-deployment"
-                    def containerName = "myapp"
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                    script {
+                        def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+                        def deployment = "myapp-deployment"
+                        def containerName = "myapp"
 
-                    sh "kubectl --kubeconfig $KUBECONFIG set image deployment/${deployment} ${containerName}=${fullImage} --record"
-                    sh "kubectl --kubeconfig $KUBECONFIG rollout status deployment/${deployment}"
+                        sh "kubectl --kubeconfig=$KUBECONFIG_FILE set image deployment/${deployment} ${containerName}=${fullImage} --record"
+                        sh "kubectl --kubeconfig=$KUBECONFIG_FILE rollout status deployment/${deployment}"
+                    }
                 }
             }
         }
     }
     post {
         failure {
-            script {
-                sh "kubectl --kubeconfig $KUBECONFIG rollout undo deployment/myapp-deployment"
+            withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                sh "kubectl --kubeconfig=$KUBECONFIG_FILE rollout undo deployment/myapp-deployment"
             }
         }
     }
