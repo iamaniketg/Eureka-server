@@ -18,9 +18,7 @@ pipeline {
 
         stage('Build & Test') {
             steps {
-                script {
-                    sh 'mvn clean package -DskipTests'
-                }
+                sh 'mvn clean package -DskipTests'
             }
         }
 
@@ -29,8 +27,6 @@ pipeline {
                 script {
                     env.IMAGE_TAG = "${BUILD_NUMBER}"
                     def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-
-                    // Ensure Docker socket is mounted
                     sh "docker build -t ${fullImage} ."
                 }
             }
@@ -38,17 +34,15 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
-                node {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub-creds',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )]) {
-                        script {
-                            def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-                            sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                            sh "docker push ${fullImage}"
-                        }
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    script {
+                        def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+                        sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                        sh "docker push ${fullImage}"
                     }
                 }
             }
@@ -56,16 +50,14 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                node {
-                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-                        script {
-                            def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-                            def deployment = "myapp-deployment"
-                            def containerName = "myapp"
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                    script {
+                        def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+                        def deployment = "myapp-deployment"
+                        def containerName = "myapp"
 
-                            sh "kubectl --kubeconfig=$KUBECONFIG_FILE set image deployment/${deployment} ${containerName}=${fullImage} --record"
-                            sh "kubectl --kubeconfig=$KUBECONFIG_FILE rollout status deployment/${deployment}"
-                        }
+                        sh "kubectl --kubeconfig=$KUBECONFIG_FILE set image deployment/${deployment} ${containerName}=${fullImage} --record"
+                        sh "kubectl --kubeconfig=$KUBECONFIG_FILE rollout status deployment/${deployment}"
                     }
                 }
             }
@@ -78,12 +70,10 @@ pipeline {
         }
 
         failure {
-            node {
-                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-                    script {
-                        echo "Deployment failed! Rolling back..."
-                        sh "kubectl --kubeconfig=$KUBECONFIG_FILE rollout undo deployment/myapp-deployment"
-                    }
+            withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                script {
+                    echo "Deployment failed! Rolling back..."
+                    sh "kubectl --kubeconfig=$KUBECONFIG_FILE rollout undo deployment/myapp-deployment"
                 }
             }
         }
