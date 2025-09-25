@@ -76,12 +76,14 @@ pipeline {
             echo "Build, Docker push, and Kubernetes deployment completed successfully!"
         }
         failure {
-            withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-                script {
-                    echo "Deployment failed! Rolling back..."
-                    sh "kubectl --kubeconfig=$KUBECONFIG_FILE rollout undo deployment/myapp-deployment"
+            script {
+                node {
+                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                        echo "Deployment failed! Rolling back..."
+                        sh "kubectl --kubeconfig=$KUBECONFIG_FILE rollout undo deployment/myapp-deployment"
+                    }
                 }
             }
         }
-    } // <-- closing post
+    }
 } // <-- closing pipeline
