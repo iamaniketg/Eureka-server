@@ -7,6 +7,9 @@ pipeline {
         MAVEN_HOME = tool name: 'maven', type: 'hudson.tasks.Maven$MavenInstallation'
         DOCKER_HOME = tool name: 'docker', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
         PATH = "${MAVEN_HOME}/bin:${DOCKER_HOME}/bin:${env.PATH}"
+        K8S_NAMESPACE = 'backend'
+        K8S_DEPLOYMENT = 'discovery-server'
+        K8S_CONTAINER = 'discovery-server'
     }
 
     stages {
@@ -55,11 +58,19 @@ pipeline {
                 withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
                     script {
                         def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-                        def deployment = "myapp-deployment"
-                        def containerName = "myapp"
-
-                        sh 'kubectl --kubeconfig=$KUBECONFIG_FILE set image deployment/myapp-deployment myapp=' + fullImage + ' --record'
-                        sh 'kubectl --kubeconfig=$KUBECONFIG_FILE rollout status deployment/myapp-deployment'
+                        sh "kubectl --kubeconfig=\$KUBECONFIG_FILE set image deployment/${K8S_DEPLOYMENT} ${K8S_CONTAINER}=${fullImage} --record -n ${K8S_NAMESPACE}"
+                        sh "kubectl --kubeconfig=\$KUBECONFIG_FILE rollout status deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE} --timeout=5m"
+                    }
+                }
+            }
+            post {
+                success {
+                    echo 'Deployment successful!'
+                }
+                failure {
+                    echo 'Deployment failed! Rolling back...'
+                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                        sh "kubectl --kubeconfig=\$KUBECONFIG_FILE rollout undo deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE}"
                     }
                 }
             }
@@ -69,16 +80,6 @@ pipeline {
     post {
         success {
             echo "Build, Docker push, and Kubernetes deployment completed successfully!"
-        }
-        failure {
-            script {
-                node {
-                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-                        echo "Deployment failed! Rolling back..."
-                        sh 'kubectl --kubeconfig=$KUBECONFIG_FILE rollout undo deployment/myapp-deployment'
-                    }
-                }
-            }
         }
     }
 }
