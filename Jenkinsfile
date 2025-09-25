@@ -1,9 +1,14 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'maven:3.9.6-eclipse-temurin-17' // Maven + JDK 17
+            args  '-v /var/run/docker.sock:/var/run/docker.sock' // mount docker
+        }
+    }
     environment {
-        REGISTRY    = "docker.io/captainaniii" // change this
+        REGISTRY    = "docker.io/captainaniii"
         IMAGE_NAME  = "springboot-app"
-        KUBECONFIG  = credentials('kubeconfig') // kubeconfig file from Jenkins credentials
+        KUBECONFIG  = credentials('kubeconfig')
     }
     stages {
         stage('Checkout') {
@@ -21,9 +26,21 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    env.IMAGE_TAG = "${BUILD_NUMBER}"  // incremented image tag
+                    env.IMAGE_TAG = "${BUILD_NUMBER}"
                     def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
                     sh "docker build -t ${fullImage} ."
+                }
+            }
+        }
+        stage('Push to DockerHub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                    sh "docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
                 }
             }
         }
@@ -41,23 +58,9 @@ pipeline {
         }
     }
     post {
-        success {
-            script {
-                def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                    sh "docker push ${fullImage}"
-                }
-            }
-        }
         failure {
             script {
-                def deployment = "myapp-deployment"
-                sh "kubectl --kubeconfig $KUBECONFIG rollout undo deployment/${deployment}"
+                sh "kubectl --kubeconfig $KUBECONFIG rollout undo deployment/myapp-deployment"
             }
         }
     }
