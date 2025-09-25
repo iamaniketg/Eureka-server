@@ -4,17 +4,12 @@ pipeline {
     environment {
         REGISTRY   = "docker.io/captainaniii"
         IMAGE_NAME = "springboot-app"
-
-        // Use Jenkins-managed tools
-        MAVEN_HOME   = tool name: 'maven', type: 'hudson.tasks.Maven$MavenInstallation'
-        DOCKER_HOME  = tool name: 'docker', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
-        KUBECTL_HOME = tool name: 'kubectl', type: 'org.jenkinsci.plugins.kubernetes.cli.KubectlInstallation'
-
-        PATH = "${MAVEN_HOME}/bin:${DOCKER_HOME}/bin:${KUBECTL_HOME}/bin:${env.PATH}"
+        MAVEN_HOME = tool name: 'maven', type: 'hudson.tasks.Maven$MavenInstallation'
+        DOCKER_HOME = tool name: 'docker', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
+        PATH = "${MAVEN_HOME}/bin:${DOCKER_HOME}/bin:${env.PATH}"
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -63,8 +58,8 @@ pipeline {
                         def deployment = "myapp-deployment"
                         def containerName = "myapp"
 
-                        sh "kubectl --kubeconfig=$KUBECONFIG_FILE set image deployment/${deployment} ${containerName}=${fullImage} --record"
-                        sh "kubectl --kubeconfig=$KUBECONFIG_FILE rollout status deployment/${deployment}"
+                        sh 'kubectl --kubeconfig=$KUBECONFIG_FILE set image deployment/myapp-deployment myapp=' + fullImage + ' --record'
+                        sh 'kubectl --kubeconfig=$KUBECONFIG_FILE rollout status deployment/myapp-deployment'
                     }
                 }
             }
@@ -80,10 +75,10 @@ pipeline {
                 node {
                     withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
                         echo "Deployment failed! Rolling back..."
-                        sh "kubectl --kubeconfig=$KUBECONFIG_FILE rollout undo deployment/myapp-deployment"
+                        sh 'kubectl --kubeconfig=$KUBECONFIG_FILE rollout undo deployment/myapp-deployment'
                     }
                 }
             }
         }
     }
-} // <-- closing pipeline
+}
