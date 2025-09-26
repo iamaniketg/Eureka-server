@@ -93,9 +93,11 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     script {
-                        def fullImage = "${IMAGE_NAME}:${IMAGE_TAG}"
-                        sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                        sh "docker push ${fullImage}"
+                        retry(3) {
+                            def fullImage = "${IMAGE_NAME}:${IMAGE_TAG}"
+                            sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                            sh "docker push ${fullImage}"
+                        }
                     }
                 }
             }
