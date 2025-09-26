@@ -28,11 +28,11 @@ pipeline {
         stage('Install gcloud') {
             steps {
                 script {
+                    def gcloudPath = "${WORKSPACE}/google-cloud-sdk/bin/gcloud"
                     def gcloudInstalled = false
-                    if (fileExists('google-cloud-sdk/bin/gcloud')) {
-                        env.PATH = "${env.PATH}:${WORKSPACE}/google-cloud-sdk/bin"
+                    if (fileExists(gcloudPath)) {
                         try {
-                            sh 'gcloud --version'
+                            sh "${gcloudPath} --version"
                             gcloudInstalled = true
                         } catch (err) {
                             echo "Existing gcloud installation is invalid, will reinstall."
@@ -43,10 +43,10 @@ pipeline {
                         sh 'curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz'
                         sh 'tar -xf google-cloud-cli-linux-x86_64.tar.gz'
                         sh './google-cloud-sdk/install.sh --quiet --usage-reporting false --path-update false --bash-completion false'
-                        sh './google-cloud-sdk/bin/gcloud components install kubectl --quiet'
-                        env.PATH = "${env.PATH}:${WORKSPACE}/google-cloud-sdk/bin"
+                        sh "${WORKSPACE}/google-cloud-sdk/bin/gcloud components install kubectl --quiet"
                     }
-                    sh 'gcloud --version'  // Verify installation
+                    env.PATH = "${WORKSPACE}/google-cloud-sdk/bin:${env.PATH}"
+                    sh "${gcloudPath} --version"  // Verify installation
                 }
             }
         }
