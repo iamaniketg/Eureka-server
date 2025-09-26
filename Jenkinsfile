@@ -10,8 +10,8 @@ pipeline {
         K8S_DEPLOYMENT = 'eureka-server'  // Your deployment name from YAML
         K8S_CONTAINER = 'eureka-server'  // Your container name from YAML (not used for apply, but kept for reference)
         // K8S_NAMESPACE = 'default'  // Uncomment and set if using a specific namespace, then add -n ${K8S_NAMESPACE} to kubectl commands
-        MAVEN_HOME = tool name: 'maven', type: 'hudson.tasks.Maven$MavenInstallation'
-        DOCKER_HOME = tool name: 'Docker', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
+        MAVEN_HOME = tool name: 'maven'
+        DOCKER_HOME = tool name: 'Docker'
         PATH = "${MAVEN_HOME}/bin:${DOCKER_HOME}/bin:${env.PATH}"
     }
 
