@@ -7,9 +7,9 @@ pipeline {
         REGION = 'asia-southeast1'  // Your region
         ZONE = 'asia-southeast1-a'  // Your cluster zone
         CLUSTER_NAME = 'cluster-1'  // Your actual cluster name
-        K8S_DEPLOYMENT = 'springboot-app'  // Assume your deployment name; change if different
-        K8S_CONTAINER = 'springboot-app'  // Assume your container name; change if different
-        // K8S_NAMESPACE = 'default'  // Uncomment and set if using a specific namespace
+        K8S_DEPLOYMENT = 'eureka-server'  // Your deployment name from YAML
+        K8S_CONTAINER = 'eureka-server'  // Your container name from YAML (not used for apply, but kept for reference)
+        // K8S_NAMESPACE = 'default'  // Uncomment and set if using a specific namespace, then add -n ${K8S_NAMESPACE} to kubectl commands
         MAVEN_HOME = tool name: 'maven', type: 'hudson.tasks.Maven$MavenInstallation'
         DOCKER_HOME = tool name: 'docker', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
         PATH = "${MAVEN_HOME}/bin:${DOCKER_HOME}/bin:${env.PATH}"
@@ -21,7 +21,7 @@ pipeline {
                 git(
                     branch: 'main',
                     credentialsId: 'github-credentials',  // Your token-based credential ID
-                    url: 'https://github.com/PrashantMurtale/CategoryProduct.git'  // Changed to HTTPS
+                    url: 'https://github.com/iamaniketg/Eureka-server.git'  // Changed to HTTPS
                 )
             }
         }
@@ -62,7 +62,7 @@ pipeline {
         stage('Push Docker Image to Docker Hub') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
+                    credentialsId: 'docker-cred',
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
@@ -82,9 +82,12 @@ pipeline {
                         def fullImage = "${IMAGE_NAME}:${IMAGE_TAG}"
                         sh 'gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS'
                         sh "gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${ZONE} --project ${PROJECT_ID}"
-                        // If you need to apply initial YAML once: sh "kubectl apply -f k8s/mysqlspringdeployment.yaml"
-                        sh "kubectl set image deployment/${K8S_DEPLOYMENT} ${K8S_CONTAINER}=${fullImage} --record"  // Add -n ${K8S_NAMESPACE} if using namespace
-                        sh "kubectl rollout status deployment/${K8S_DEPLOYMENT} --timeout=5m"  // Add -n ${K8S_NAMESPACE} if needed
+                        sh """
+                            sed -i 's|image: .*|image: ${fullImage}|g' eureka-deployment.yaml
+                            kubectl apply -f eureka-configmap.yaml
+                            kubectl apply -f eureka-deployment.yaml
+                            kubectl rollout status deployment/${K8S_DEPLOYMENT} --timeout=5m
+                        """
                     }
                 }
             }
@@ -97,7 +100,7 @@ pipeline {
                     withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
                         sh 'gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS'
                         sh "gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${ZONE} --project ${PROJECT_ID}"
-                        sh "kubectl rollout undo deployment/${K8S_DEPLOYMENT}"  // Add -n ${K8S_NAMESPACE} if needed
+                        sh "kubectl rollout undo deployment/${K8S_DEPLOYMENT}"
                     }
                 }
             }
