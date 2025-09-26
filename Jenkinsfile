@@ -2,84 +2,103 @@ pipeline {
     agent any
 
     environment {
-        REGISTRY   = "docker.io/captainaniii"
-        IMAGE_NAME = "springboot-app"
-        MAVEN_HOME = tool name: 'maven', type: 'hudson.tasks.Maven$MavenInstallation'
-        DOCKER_HOME = tool name: 'docker', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
-        PATH = "${MAVEN_HOME}/bin:${DOCKER_HOME}/bin:${env.PATH}"
-        K8S_NAMESPACE = 'backend'
-        K8S_DEPLOYMENT = 'discovery-server'
-        K8S_CONTAINER = 'discovery-server'
+        PROJECT_ID = 'springbootapp-gke'
+        REPO = 'springboot-app'
+        IMAGE_NAME = "us-central1-docker.pkg.dev/springbootapp-gke/springboot-app/springboot-app"
+        IMAGE_TAG = 'latest'
+        REGION = 'us-central1'
+        ZONE = 'us-central1-a'
+        CLUSTER_NAME = 'gke-cluster'
+		PATH = "/home/murtale_prashant/google-cloud-sdk/bin:$PATH"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main',
-                    credentialsId: 'github-credentials',
-                    url: 'https://github.com/iamaniketg/Eureka-server.git'
+                git(
+                    branch: 'main',
+                    credentialsId: 'github-ssh-cred',
+                    url: 'git@github.com:PrashantMurtale/CategoryProduct.git'
+                )
             }
         }
 
-        stage('Build & Test') {
+        stage('Set up GCP') {
             steps {
-                sh 'mvn clean package -DskipTests'
+                withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+                    script {
+                        sh '''
+                            echo "Authenticating with GCP..."
+                            gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+                            gcloud config set project $PROJECT_ID
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Build with Maven') {
+            steps {
+                sh '''
+                    echo "Building Spring Boot JAR..."
+                    mvn clean package -DskipTests
+                '''
+            }
+        }
+
+        stage('Docker Auth') {
+            steps {
+                withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+                    sh '''
+                        gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+                        gcloud auth configure-docker ${REGION}-docker.pkg.dev -q
+                    '''
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    env.IMAGE_TAG = "${BUILD_NUMBER}"
-                    def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-                    sh "docker build -t ${fullImage} ."
-                }
+                sh '''
+                    echo "Building Docker image..."
+                    docker build -t us-central1-docker.pkg.dev/springbootapp-gke/springboot-app/springboot-app:latest .
+                '''
             }
         }
 
         stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    script {
-                        def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-                        sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                        sh "docker push ${fullImage}"
-                    }
-                }
+                sh '''
+                    echo "Pushing Docker image to GCP Artifact Registry..."
+					docker push us-central1-docker.pkg.dev/springbootapp-gke/springboot-app/springboot-app:latest
+                '''
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Deploy to GKE') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-                    script {
-                        def fullImage = "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-                        sh "kubectl --kubeconfig=\$KUBECONFIG_FILE set image deployment/${K8S_DEPLOYMENT} ${K8S_CONTAINER}=${fullImage} --record -n ${K8S_NAMESPACE}"
-                        sh "kubectl --kubeconfig=\$KUBECONFIG_FILE rollout status deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE} --timeout=5m"
-                    }
-                }
-            }
-            post {
-                success {
-                    echo 'Deployment successful!'
-                }
-                failure {
-                    echo 'Deployment failed! Rolling back...'
-                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-                        sh "kubectl --kubeconfig=\$KUBECONFIG_FILE rollout undo deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE}"
-                    }
+                withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GCP_KEY')]) {
+                    sh '''
+						export PATH=/home/murtale_prashant/google-cloud-sdk/bin:$PATH
+                        gcloud auth activate-service-account --key-file=$GCP_KEY
+                        gcloud container clusters get-credentials $CLUSTER_NAME --zone $ZONE --project $PROJECT_ID
+                        echo "Applying Kubernetes manifests..."
+                        kubectl apply -f k8s/mysqlspringdeployment.yaml --validate=false
+                    '''
                 }
             }
         }
     }
 
     post {
+        always {
+            sh 'echo "Pipeline finished - cleaning up..."'
+        }
         success {
-            echo "Build, Docker push, and Kubernetes deployment completed successfully!"
+            sh 'echo "✅ Deployment successful!"'
+        }
+        failure {
+            sh 'echo "❌ Deployment failed!"'
         }
     }
 }
