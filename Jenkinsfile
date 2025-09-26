@@ -29,7 +29,6 @@ pipeline {
             steps {
                 script {
                     def gcloudPath = "${WORKSPACE}/google-cloud-sdk/bin/gcloud"
-                    def kubectlPath = "${WORKSPACE}/google-cloud-sdk/bin/kubectl"
                     def gcloudInstalled = false
                     if (fileExists(gcloudPath)) {
                         try {
@@ -45,6 +44,7 @@ pipeline {
                         sh 'tar -xf google-cloud-cli-linux-x86_64.tar.gz'
                         sh './google-cloud-sdk/install.sh --quiet --usage-reporting false --path-update false --bash-completion false'
                         sh "${WORKSPACE}/google-cloud-sdk/bin/gcloud components install kubectl --quiet"
+                        sh "${WORKSPACE}/google-cloud-sdk/bin/gcloud components install gke-gcloud-auth-plugin --quiet"
                     }
                     sh "${gcloudPath} --version"  // Verify installation
                 }
@@ -56,9 +56,10 @@ pipeline {
                 withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
                     script {
                         sh """
+                            export PATH=${WORKSPACE}/google-cloud-sdk/bin:\$PATH
                             echo "Authenticating with GCP..."
-                            ${WORKSPACE}/google-cloud-sdk/bin/gcloud auth activate-service-account --key-file=\$GOOGLE_APPLICATION_CREDENTIALS
-                            ${WORKSPACE}/google-cloud-sdk/bin/gcloud config set project ${PROJECT_ID}
+                            gcloud auth activate-service-account --key-file=\$GOOGLE_APPLICATION_CREDENTIALS
+                            gcloud config set project ${PROJECT_ID}
                         """
                     }
                 }
@@ -105,13 +106,14 @@ pipeline {
                 withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
                     script {
                         def fullImage = "${IMAGE_NAME}:${IMAGE_TAG}"
-                        sh "${WORKSPACE}/google-cloud-sdk/bin/gcloud auth activate-service-account --key-file=\$GOOGLE_APPLICATION_CREDENTIALS"
-                        sh "${WORKSPACE}/google-cloud-sdk/bin/gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${ZONE} --project ${PROJECT_ID}"
                         sh """
+                            export PATH=${WORKSPACE}/google-cloud-sdk/bin:\$PATH
+                            gcloud auth activate-service-account --key-file=\$GOOGLE_APPLICATION_CREDENTIALS
+                            gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${ZONE} --project ${PROJECT_ID}
                             sed -i 's|image: .*|image: ${fullImage}|g' eureka-deployment.yaml
-                            ${WORKSPACE}/google-cloud-sdk/bin/kubectl apply -f eureka-configmap.yaml
-                            ${WORKSPACE}/google-cloud-sdk/bin/kubectl apply -f eureka-deployment.yaml
-                            ${WORKSPACE}/google-cloud-sdk/bin/kubectl rollout status deployment/${K8S_DEPLOYMENT} --timeout=5m
+                            kubectl apply -f eureka-configmap.yaml
+                            kubectl apply -f eureka-deployment.yaml
+                            kubectl rollout status deployment/${K8S_DEPLOYMENT} --timeout=5m
                         """
                     }
                 }
@@ -123,9 +125,12 @@ pipeline {
                 failure {
                     echo 'Deployment failed! Rolling back...'
                     withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
-                        sh "${WORKSPACE}/google-cloud-sdk/bin/gcloud auth activate-service-account --key-file=\$GOOGLE_APPLICATION_CREDENTIALS"
-                        sh "${WORKSPACE}/google-cloud-sdk/bin/gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${ZONE} --project ${PROJECT_ID}"
-                        sh "${WORKSPACE}/google-cloud-sdk/bin/kubectl rollout undo deployment/${K8S_DEPLOYMENT}"
+                        sh """
+                            export PATH=${WORKSPACE}/google-cloud-sdk/bin:\$PATH
+                            gcloud auth activate-service-account --key-file=\$GOOGLE_APPLICATION_CREDENTIALS
+                            gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${ZONE} --project ${PROJECT_ID}
+                            kubectl rollout undo deployment/${K8S_DEPLOYMENT}
+                        """
                     }
                 }
             }
