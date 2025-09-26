@@ -7,8 +7,8 @@ pipeline {
         REGION = 'asia-southeast1'  // Your region
         ZONE = 'asia-southeast1-a'  // Your cluster zone
         CLUSTER_NAME = 'cluster-1'  // Your actual cluster name
-        K8S_DEPLOYMENT = 'eureka-server'  // Your deployment name from YAML
-        K8S_CONTAINER = 'eureka-server'  // Your container name from YAML (not used for apply, but kept for reference)
+        K8S_DEPLOYMENT = 'discovery-server'  // Your deployment name from YAML
+        K8S_CONTAINER = 'discovery-server'  // Your container name from YAML (not used for apply, but kept for reference)
         K8S_NAMESPACE = 'backend'  // Set to the namespace used in YAML
         MAVEN_HOME = tool name: 'maven'
         PATH = "${MAVEN_HOME}/bin:${env.PATH}"
@@ -132,7 +132,7 @@ pipeline {
                             export PATH=${WORKSPACE}/google-cloud-sdk/bin:\$PATH
                             gcloud auth activate-service-account --key-file=\$GOOGLE_APPLICATION_CREDENTIALS
                             gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${ZONE} --project ${PROJECT_ID}
-                            kubectl rollout undo deployment/${K8S_DEPLOYMENT} --namespace=${K8S_NAMESPACE}
+                            kubectl rollout undo deployment/${K8S_DEPLOYMENT} --namespace=${K8S_NAMESPACE} || true
                         """
                     }
                 }
