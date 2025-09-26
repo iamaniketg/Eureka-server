@@ -2,14 +2,17 @@ pipeline {
     agent any
 
     environment {
-        PROJECT_ID = 'springbootapp-gke'
-        REPO = 'springboot-app'
-        IMAGE_NAME = "us-central1-docker.pkg.dev/springbootapp-gke/springboot-app/springboot-app"
-        IMAGE_TAG = 'latest'
-        REGION = 'us-central1'
-        ZONE = 'us-central1-a'
-        CLUSTER_NAME = 'gke-cluster'
-		PATH = "/home/murtale_prashant/google-cloud-sdk/bin:$PATH"
+        PROJECT_ID = 'thinking-anthem-471805-a1'  // Your actual project ID
+        IMAGE_NAME = "captainaniii/eureka-server"  // Your Docker Hub repo/image
+        REGION = 'asia-southeast1'  // Your region
+        ZONE = 'asia-southeast1-a'  // Your cluster zone
+        CLUSTER_NAME = 'cluster-1'  // Your actual cluster name
+        K8S_DEPLOYMENT = 'springboot-app'  // Assume your deployment name; change if different
+        K8S_CONTAINER = 'springboot-app'  // Assume your container name; change if different
+        // K8S_NAMESPACE = 'default'  // Uncomment and set if using a specific namespace
+        MAVEN_HOME = tool name: 'maven', type: 'hudson.tasks.Maven$MavenInstallation'
+        DOCKER_HOME = tool name: 'docker', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
+        PATH = "${MAVEN_HOME}/bin:${DOCKER_HOME}/bin:${env.PATH}"
     }
 
     stages {
@@ -17,8 +20,8 @@ pipeline {
             steps {
                 git(
                     branch: 'main',
-                    credentialsId: 'github-ssh-cred',
-                    url: 'git@github.com:PrashantMurtale/CategoryProduct.git'
+                    credentialsId: 'github-credentials',  // Your token-based credential ID
+                    url: 'https://github.com/PrashantMurtale/CategoryProduct.git'  // Changed to HTTPS
                 )
             }
         }
@@ -46,45 +49,56 @@ pipeline {
             }
         }
 
-        stage('Docker Auth') {
+        stage('Build Docker Image') {
             steps {
-                withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
-                    sh '''
-                        gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
-                        gcloud auth configure-docker ${REGION}-docker.pkg.dev -q
-                    '''
+                script {
+                    env.IMAGE_TAG = "${BUILD_NUMBER}"
+                    def fullImage = "${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh "docker build -t ${fullImage} ."
                 }
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Push Docker Image to Docker Hub') {
             steps {
-                sh '''
-                    echo "Building Docker image..."
-                    docker build -t us-central1-docker.pkg.dev/springbootapp-gke/springboot-app/springboot-app:latest .
-                '''
-            }
-        }
-
-        stage('Push Docker Image') {
-            steps {
-                sh '''
-                    echo "Pushing Docker image to GCP Artifact Registry..."
-					docker push us-central1-docker.pkg.dev/springbootapp-gke/springboot-app/springboot-app:latest
-                '''
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    script {
+                        def fullImage = "${IMAGE_NAME}:${IMAGE_TAG}"
+                        sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                        sh "docker push ${fullImage}"
+                    }
+                }
             }
         }
 
         stage('Deploy to GKE') {
             steps {
-                withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GCP_KEY')]) {
-                    sh '''
-						export PATH=/home/murtale_prashant/google-cloud-sdk/bin:$PATH
-                        gcloud auth activate-service-account --key-file=$GCP_KEY
-                        gcloud container clusters get-credentials $CLUSTER_NAME --zone $ZONE --project $PROJECT_ID
-                        echo "Applying Kubernetes manifests..."
-                        kubectl apply -f k8s/mysqlspringdeployment.yaml --validate=false
-                    '''
+                withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+                    script {
+                        def fullImage = "${IMAGE_NAME}:${IMAGE_TAG}"
+                        sh 'gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS'
+                        sh "gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${ZONE} --project ${PROJECT_ID}"
+                        // If you need to apply initial YAML once: sh "kubectl apply -f k8s/mysqlspringdeployment.yaml"
+                        sh "kubectl set image deployment/${K8S_DEPLOYMENT} ${K8S_CONTAINER}=${fullImage} --record"  // Add -n ${K8S_NAMESPACE} if using namespace
+                        sh "kubectl rollout status deployment/${K8S_DEPLOYMENT} --timeout=5m"  // Add -n ${K8S_NAMESPACE} if needed
+                    }
+                }
+            }
+            post {
+                success {
+                    echo 'Deployment successful!'
+                }
+                failure {
+                    echo 'Deployment failed! Rolling back...'
+                    withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+                        sh 'gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS'
+                        sh "gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${ZONE} --project ${PROJECT_ID}"
+                        sh "kubectl rollout undo deployment/${K8S_DEPLOYMENT}"  // Add -n ${K8S_NAMESPACE} if needed
+                    }
                 }
             }
         }
