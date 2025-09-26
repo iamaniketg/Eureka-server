@@ -9,7 +9,7 @@ pipeline {
         CLUSTER_NAME = 'cluster-1'  // Your actual cluster name
         K8S_DEPLOYMENT = 'eureka-server'  // Your deployment name from YAML
         K8S_CONTAINER = 'eureka-server'  // Your container name from YAML (not used for apply, but kept for reference)
-        // K8S_NAMESPACE = 'default'  // Uncomment and set if using a specific namespace, then add -n ${K8S_NAMESPACE} to kubectl commands
+        K8S_NAMESPACE = 'backend'  // Set to the namespace used in YAML
         MAVEN_HOME = tool name: 'maven'
         PATH = "${MAVEN_HOME}/bin:${env.PATH}"
     }
@@ -110,10 +110,11 @@ pipeline {
                             export PATH=${WORKSPACE}/google-cloud-sdk/bin:\$PATH
                             gcloud auth activate-service-account --key-file=\$GOOGLE_APPLICATION_CREDENTIALS
                             gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${ZONE} --project ${PROJECT_ID}
+                            kubectl create namespace ${K8S_NAMESPACE} || true
                             sed -i 's|image: .*|image: ${fullImage}|g' eureka-deployment.yaml
                             kubectl apply -f eureka-configmap.yaml
                             kubectl apply -f eureka-deployment.yaml
-                            kubectl rollout status deployment/${K8S_DEPLOYMENT} --timeout=5m
+                            kubectl rollout status deployment/${K8S_DEPLOYMENT} --namespace=${K8S_NAMESPACE} --timeout=5m
                         """
                     }
                 }
@@ -129,7 +130,7 @@ pipeline {
                             export PATH=${WORKSPACE}/google-cloud-sdk/bin:\$PATH
                             gcloud auth activate-service-account --key-file=\$GOOGLE_APPLICATION_CREDENTIALS
                             gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${ZONE} --project ${PROJECT_ID}
-                            kubectl rollout undo deployment/${K8S_DEPLOYMENT}
+                            kubectl rollout undo deployment/${K8S_DEPLOYMENT} --namespace=${K8S_NAMESPACE}
                         """
                     }
                 }
