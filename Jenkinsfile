@@ -11,8 +11,7 @@ pipeline {
         K8S_CONTAINER = 'eureka-server'  // Your container name from YAML (not used for apply, but kept for reference)
         // K8S_NAMESPACE = 'default'  // Uncomment and set if using a specific namespace, then add -n ${K8S_NAMESPACE} to kubectl commands
         MAVEN_HOME = tool name: 'maven'
-        DOCKER_HOME = tool name: 'Docker'
-        PATH = "${MAVEN_HOME}/bin:${DOCKER_HOME}/bin:${env.PATH}"
+        PATH = "${MAVEN_HOME}/bin:${env.PATH}"
     }
 
     stages {
@@ -23,6 +22,20 @@ pipeline {
                     credentialsId: 'github-credentials',  // Your token-based credential ID
                     url: 'https://github.com/iamaniketg/Eureka-server.git'  // Changed to HTTPS
                 )
+            }
+        }
+
+        stage('Install gcloud') {
+            steps {
+                script {
+                    if (!fileExists('google-cloud-sdk')) {
+                        sh 'curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-540.0.0-linux-x86_64.tar.gz'
+                        sh 'tar -xf google-cloud-cli-540.0.0-linux-x86_64.tar.gz'
+                        sh './google-cloud-sdk/install.sh --quiet --usage-reporting false --path-update false --bash-completion false'
+                        sh './google-cloud-sdk/bin/gcloud components install kubectl --quiet'
+                    }
+                    env.PATH = "${env.PATH}:${WORKSPACE}/google-cloud-sdk/bin"
+                }
             }
         }
 
