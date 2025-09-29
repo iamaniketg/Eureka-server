@@ -61,4 +61,3 @@ Access the Eureka dashboard at `http://localhost:8761`
 - If services don't register, check Eureka client configurations in other services.
 - Ensure the hostname is correctly set via environment variables.
 - Check pod logs: `kubectl logs -f <pod-name> -n backend`
-
